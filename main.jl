@@ -1,4 +1,4 @@
-using JuMP, HiGHS, CSV, DataFrames, Printf
+using JuMP, HiGHS, CSV, DataFrames
 
 # Load data from CSV files
 demand = CSV.read("data/demand.csv", DataFrame)
