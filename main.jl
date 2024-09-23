@@ -13,7 +13,7 @@ T = 240
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = false  # Set to true to use DSM, or false to run without DSM
+enableDSM = true  # Set to true to use DSM, or false to run without DSM
 
 # Define decision variables for generation
 @variable(ESM, generation[1:T, 1:4] >= 0)  # Generation for wind, solar, coal, gas
@@ -94,6 +94,14 @@ for hour in 2:T
     end
 end
 
+# Reserve margin constraint: Ensure that a percentage of total capacity is always reserved
+reserve_margin = 0.1  # Require 10% of total capacity to be reserved
+
+for hour in 1:T
+    @constraint(ESM, sum(generation[hour, :]) <= (1 - reserve_margin) * sum(generation_capacity[!, :capacity_MW]))
+end
+
+
 
 # Objective function: Minimize cost using time-varying costs
 @objective(ESM, Min, sum(generation[t, tech] * time_varying_costs[t, tech] for t in 1:T, tech in 1:4))
@@ -124,3 +132,13 @@ else
 end
 
 CSV.write("generation_and_DSM_results.csv", results)
+
+# Objective values with and without DSM
+objective_dsm_enabled = 7.166995289728293e7
+objective_dsm_disabled = 7.21222266230257e7
+
+# Calculate percentage cost reduction
+cost_reduction_percent = ((objective_dsm_disabled - objective_dsm_enabled) / objective_dsm_disabled) * 100
+
+# Print the percentage cost reduction
+println("Cost reduction due to DSM: ", round(cost_reduction_percent, digits=2), "%")
