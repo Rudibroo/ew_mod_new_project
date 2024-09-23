@@ -98,3 +98,4 @@ results = DataFrame(hour = 1:T, wind = value.(generation[:, 1]), solar = value.(
                     coal = value.(generation[:, 3]), gas = value.(generation[:, 4]))
 CSV.write("generation_results.csv", results)
 
+println("Git test")
