@@ -15,10 +15,15 @@ ESM = Model(HiGHS.Optimizer)
 # Define decision variables for generation
 @variable(ESM, generation[1:T, 1:4] >= 0)  # Generation for wind, solar, coal, gas
 
-# Constraints for demand satisfaction (no DSM yet)
+# Define storage variables in the same model
+@variable(ESM, energy_in_storage[1:T, 1:2] >= 0)  # Energy stored for battery and pumped hydro
+@variable(ESM, charge[1:T, 1:2] >= 0)  # Charging power for battery and pumped hydro
+@variable(ESM, discharge[1:T, 1:2] >= 0)  # Discharging power for battery and pumped hydro
+
+# Constraints for demand satisfaction, now including storage discharge
 for hour in 1:T
     total_demand = demand.fixed_demand[hour] + demand.flexible_demand[hour]
-    @constraint(ESM, sum(generation[hour, :]) == total_demand)
+    @constraint(ESM, sum(generation[hour, :]) + sum(discharge[hour, :]) == total_demand)
 end
 
 # Capacity constraints for each technology
@@ -38,22 +43,8 @@ for hour in 1:T
     @constraint(ESM, generation[hour, 1] + curtailment_wind[hour] == availability.wind_availability[hour] * generation_capacity.capacity_MW[1])
 end
 
-# Capacity constraint
-for hour in 1:T
-    @constraint(ESM, generation[hour, 1] <= availability.wind_availability[hour] * generation_capacity.capacity_MW[1])  # Wind
-    @constraint(ESM, generation[hour, 2] <= availability.solar_availability[hour] * generation_capacity.capacity_MW[2])  # Solar
-    @constraint(ESM, generation[hour, 3] <= generation_capacity.capacity_MW[3])  # Coal
-    @constraint(ESM, generation[hour, 4] <= generation_capacity.capacity_MW[4])  # Gas
-end
-
-
 # Load storage data
 storage_capacity = CSV.read("data/storage_capacity.csv", DataFrame)
-
-# Define storage variables
-@variable(ESM, energy_in_storage[1:T, 1:2] >= 0)  # Energy stored for battery and pumped hydro
-@variable(ESM, charge[1:T, 1:2] >= 0)  # Charging power for battery and pumped hydro
-@variable(ESM, discharge[1:T, 1:2] >= 0)  # Discharging power for battery and pumped hydro
 
 # Storage capacity constraints
 for t in 1:T
@@ -69,6 +60,12 @@ for t in 1:T
     @constraint(ESM, discharge[t, 2] <= storage_capacity.discharge_rate_MW[2])  # Pumped hydro discharge rate
 end
 
+# Charging adds load, adjust energy balance with efficiency losses
+for hour in 1:T
+    total_demand = demand.fixed_demand[hour] + demand.flexible_demand[hour]
+    @constraint(ESM, sum(generation[hour, :]) >= sum(charge[hour, :]) + total_demand)  # Generation must cover demand + charging
+end
+
 # Energy balance in storage with efficiency losses
 for t in 2:T
     @constraint(ESM, 
@@ -79,8 +76,6 @@ for t in 2:T
         energy_in_storage[t, 2] == energy_in_storage[t-1, 2] + storage_capacity.efficiency_charge[2] * charge[t, 2] 
         - discharge[t, 2] / storage_capacity.efficiency_discharge[2])  # Pumped hydro storage balance
 end
-
-
 
 # Objective function: Minimize cost
 cost = costs.cost_per_MWh
@@ -95,7 +90,7 @@ println("Objective value: ", objective_value(ESM))
 
 # Export generation results to CSV
 results = DataFrame(hour = 1:T, wind = value.(generation[:, 1]), solar = value.(generation[:, 2]), 
-                    coal = value.(generation[:, 3]), gas = value.(generation[:, 4]))
-CSV.write("generation_results.csv", results)
-
-println("Git test")
+                    coal = value.(generation[:, 3]), gas = value.(generation[:, 4]),
+                    battery_charge = value.(charge[:, 1]), battery_discharge = value.(discharge[:, 1]),
+                    hydro_charge = value.(charge[:, 2]), hydro_discharge = value.(discharge[:, 2]))
+CSV.write("generation_and_storage_results.csv", results)

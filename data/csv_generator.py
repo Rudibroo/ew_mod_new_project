@@ -1,13 +1,33 @@
 import pandas as pd
+import numpy as np
 
-# Create the demand.csv file
+# Define demand profile for 10 days (240 hours)
+T = 240
+hours = list(range(1, T + 1))
+
+# Create realistic daily demand pattern
+def daily_demand(hour):
+    if hour % 24 < 6:       # 12 AM - 6 AM: Low demand (night)
+        return np.random.uniform(5000, 6000)
+    elif hour % 24 < 12:     # 6 AM - 12 PM: Morning rise
+        return np.random.uniform(7000, 10000)
+    elif hour % 24 < 18:     # 12 PM - 6 PM: Peak demand
+        return np.random.uniform(12000, 15000)
+    else:                    # 6 PM - 12 AM: Evening peak and night drop
+        return np.random.uniform(8000, 11000)
+
+# Generate demand for each hour
+fixed_demand = [daily_demand(h) for h in hours]
+flexible_demand = [np.random.uniform(2000, 3000) for h in hours]  # Random flexible demand
+
+# Create DataFrame
 demand_data = {
-    'hour': list(range(1, 241)),
-    'fixed_demand': [8000 + (i % 4000) for i in range(240)],  # Fixed demand between 8,000 and 12,000 MW
-    'flexible_demand': [4000 + (i % 3000) for i in range(240)]  # Flexible demand between 4,000 and 7,000 MW
+    'hour': hours,
+    'fixed_demand': fixed_demand,
+    'flexible_demand': flexible_demand
 }
 
-# Create the DataFrame and save it as "demand.csv"
+# Create the DataFrame and save as "demand.csv"
 demand_df = pd.DataFrame(demand_data)
 demand_df.to_csv('demand.csv', index=False)
 
