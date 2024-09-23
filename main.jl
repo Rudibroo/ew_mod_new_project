@@ -13,7 +13,7 @@ T = 240
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = true  # Set to true to use DSM, or false to run without DSM
+enableDSM = false  # Set to true to use DSM, or false to run without DSM
 
 # Define decision variables for generation
 @variable(ESM, generation[1:T, 1:4] >= 0)  # Generation for wind, solar, coal, gas
@@ -84,6 +84,16 @@ end
 for hour in 1:T
     @constraint(ESM, generation[hour, 1] + curtailment_wind[hour] == availability[!, :wind_availability][hour] * generation_capacity[!, :capacity_MW][1])
 end
+
+# Ramp rate constraint: Limit how much generation can change between hours
+ramp_rate = 0.1  # For example, plants can only change output by 10% of capacity per hour
+for hour in 2:T
+    for tech in 3:4  # Apply ramp limits to coal (3) and gas (4)
+        @constraint(ESM, generation[hour, tech] - generation[hour-1, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
+        @constraint(ESM, generation[hour-1, tech] - generation[hour, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
+    end
+end
+
 
 # Objective function: Minimize cost using time-varying costs
 @objective(ESM, Min, sum(generation[t, tech] * time_varying_costs[t, tech] for t in 1:T, tech in 1:4))
