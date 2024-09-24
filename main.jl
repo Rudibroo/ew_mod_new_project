@@ -1,10 +1,10 @@
 using JuMP, HiGHS, CSV, DataFrames
 
 # Load data from CSV files
-demand = CSV.read("data/real_demand.csv", DataFrame)
+demand = CSV.read("data/demand.csv", DataFrame)
 generation_capacity = CSV.read("data/generation_capacity.csv", DataFrame)
 costs = CSV.read("data/costs.csv", DataFrame)
-availability = CSV.read("data/real_availability.csv", DataFrame)
+availability = CSV.read("data/availability.csv", DataFrame)
 
 # Time steps (336 hours)
 T = 336
@@ -94,43 +94,43 @@ end
 
 # Capacity constraints for each technology
 for tech in 1:11  # Update to handle all 11 technologies
-    @constraint(ESM, generation[:, tech] .<= generation_capacity[!, :capacity_MW][tech])
+    @constraint(ESM, generation[:, tech] .<= generation_capacity[!, :capacity_mw][tech])
 end
 
 # Add renewable availability for specific technologies
 for hour in 1:T
     # Wind Offshore and Onshore, Photovoltaik (solar), and other renewables
-    @constraint(ESM, generation[hour, 3] <= availability[!, :wind_offshore_availability][hour] * generation_capacity[!, :capacity_MW][3])
-    @constraint(ESM, generation[hour, 4] <= availability[!, :wind_onshore_availability][hour] * generation_capacity[!, :capacity_MW][4])
-    @constraint(ESM, generation[hour, 5] <= availability[!, :photovoltaik_availability][hour] * generation_capacity[!, :capacity_MW][5])
-    @constraint(ESM, generation[hour, 6] <= availability[!, :sonstige_erneuerbare_availability][hour] * generation_capacity[!, :capacity_MW][6])
+    @constraint(ESM, generation[hour, 3] <= availability[!, :wind_offshore][hour] * generation_capacity[!, :capacity_mw][3])
+    @constraint(ESM, generation[hour, 4] <= availability[!, :wind_onshore][hour] * generation_capacity[!, :capacity_mw][4])
+    @constraint(ESM, generation[hour, 5] <= availability[!, :photovoltaik][hour] * generation_capacity[!, :capacity_mw][5])
+    @constraint(ESM, generation[hour, 6] <= availability[!, :sonstige_erneuerbare][hour] * generation_capacity[!, :capacity_mw][6])
 end
 
 # Curtailment for wind
 @variable(ESM, curtailment_wind_onshore[1:T] >= 0)
 @variable(ESM, curtailment_wind_offshore[1:T] >= 0)
 for hour in 1:T
-    @constraint(ESM, generation[hour, 3] + curtailment_wind_offshore[hour] == availability[!, :wind_offshore_availability][hour] * generation_capacity[!, :capacity_MW][3])
-    @constraint(ESM, generation[hour, 4] + curtailment_wind_onshore[hour] == availability[!, :wind_onshore_availability][hour] * generation_capacity[!, :capacity_MW][4])
+    @constraint(ESM, generation[hour, 3] + curtailment_wind_offshore[hour] == availability[!, :wind_offshore][hour] * generation_capacity[!, :capacity_mw][3])
+    @constraint(ESM, generation[hour, 4] + curtailment_wind_onshore[hour] == availability[!, :wind_onshore][hour] * generation_capacity[!, :capacity_mw][4])
 end
 
 # Ramp rate constraint: Limit how much generation can change between hours
 ramp_rate = 0.1  # For example, plants can only change output by 10% of capacity per hour
 for hour in 2:T
     for tech in 7:9  # Apply ramp limits to Braunkohle (7), Steinkohle (8), and Erdgas (9)
-        @constraint(ESM, generation[hour, tech] - generation[hour-1, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
-        @constraint(ESM, generation[hour-1, tech] - generation[hour, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
+        @constraint(ESM, generation[hour, tech] - generation[hour-1, tech] <= ramp_rate * generation_capacity[!, :capacity_mw][tech])
+        @constraint(ESM, generation[hour-1, tech] - generation[hour, tech] <= ramp_rate * generation_capacity[!, :capacity_mw][tech])
     end
 end
 
 # Reserve margin constraint: Ensure that a percentage of total capacity is always reserved
 reserve_margin = 0.1  # Require 10% of total capacity to be reserved
 for hour in 1:T
-    @constraint(ESM, sum(generation[hour, :]) <= (1 - reserve_margin) * sum(generation_capacity[!, :capacity_MW]))
+    @constraint(ESM, sum(generation[hour, :]) <= (1 - reserve_margin) * sum(generation_capacity[!, :capacity_mw]))
 end
 
 # Objective function: Minimize cost using time-varying costs
-@objective(ESM, Min, sum(generation[t, tech] * costs[tech, :cost_per_MWh] for t in 1:T, tech in 1:11))
+@objective(ESM, Min, sum(generation[t, tech] * costs[tech, :cost_per_mwh] for t in 1:T, tech in 1:11))
 
 # Solve the model
 optimize!(ESM)

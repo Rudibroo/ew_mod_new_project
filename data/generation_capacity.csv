@@ -1,12 +1,12 @@
-technology,capacity_MW
-Biomasse,8577
-Wasserkraft,5112
-Wind Onshore,8456
-Wind Offshore,59841
-Photovoltaik,76601
-Sonstige Erneuerbare,410
-Braunkohle,18363
-Steinkohle,12966
-Erdgas,36255
-Pumpspeicher,9449
-Sonstige Konventionelle,8813
+technology,capacity_mw
+biomasse,8577
+wasserkraft,5112
+wind_onshore,8456
+wind_offshore,59841
+photovoltaik,76601
+sonstige_erneuerbare,410
+braunkohle,18363
+steinkohle,12966
+erdgas,36255
+pumpspeicher,9449
+sonstige_konventionelle,8813
