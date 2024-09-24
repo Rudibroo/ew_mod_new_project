@@ -13,7 +13,10 @@ T = 240
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = true  # Set to true to use DSM, or false to run without DSM
+enableDSM = false  # Set to true to use DSM, or false to run without DSM
+
+# V2G toggle: Set to true if V2G should be used, false if not
+enableV2G = true  # Set to true to use V2G, or false to run without V2G
 
 # Define decision variables for generation
 @variable(ESM, generation[1:T, 1:4] >= 0)  # Generation for wind, solar, coal, gas
@@ -24,34 +27,19 @@ if enableDSM
     @variable(ESM, DSM_down[1:T] >= 0) # DSM shifting demand to earlier hours
 end
 
-# Define V2G variables
-@variable(ESM, EV_charge[1:T] >= 0)    # EVs charging from the grid
-@variable(ESM, EV_discharge[1:T] >= 0) # EVs discharging to the grid
-@variable(ESM, EV_storage[1:T] >= 0)   # Energy stored in EVs
+# Define V2G variables only if V2G is enabled
+if enableV2G
+    @variable(ESM, EV_charge[1:T] >= 0)    # EVs charging from the grid
+    @variable(ESM, EV_discharge[1:T] >= 0) # EVs discharging to the grid
+    @variable(ESM, EV_storage[1:T] >= 0)   # Energy stored in EVs
+end
 
 # V2G parameters (example values)
-EV_capacity = 5000  # Total capacity of EV fleet in MWh
-EV_charge_rate = 1000  # Max charging rate in MW
-EV_discharge_rate = 1000  # Max discharging rate in MW
+EV_capacity = 500  # Total capacity of EV fleet in MWh
+EV_charge_rate = 100  # Max charging rate in MW
+EV_discharge_rate = 100  # Max discharging rate in MW
 charge_efficiency = 0.9  # Charging efficiency
 discharge_efficiency = 0.9  # Discharging efficiency
-
-# Create a time-varying cost array for each technology (4 technologies)
-time_varying_costs = Array{Float64}(undef, T, 4)
-
-# Adjust costs to reflect peak and off-peak pricing
-for hour in 1:T
-    if mod(hour, 24) >= 12 && mod(hour, 24) <= 18  # Peak hours (12 PM - 6 PM)
-        time_varying_costs[hour, 3] = 80  # Coal: 80 €/MWh during peak
-        time_varying_costs[hour, 4] = 100  # Gas: 100 €/MWh during peak
-    else  # Off-peak hours
-        time_varying_costs[hour, 3] = 50  # Coal: 50 €/MWh off-peak
-        time_varying_costs[hour, 4] = 40  # Gas: 40 €/MWh off-peak
-    end
-    # Use static costs for wind and solar
-    time_varying_costs[hour, 1] = costs[!, :cost_per_MWh][1]  # Wind
-    time_varying_costs[hour, 2] = costs[!, :cost_per_MWh][2]  # Solar
-end
 
 # Constraints for demand satisfaction
 for hour in 1:T
@@ -62,7 +50,13 @@ for hour in 1:T
         # Without DSM: Normal demand satisfaction
         total_demand = demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour]
     end
-    @constraint(ESM, sum(generation[hour, :]) + EV_discharge[hour] == total_demand + EV_charge[hour])
+
+    # Adjust demand satisfaction based on V2G if enabled
+    if enableV2G
+        @constraint(ESM, sum(generation[hour, :]) + EV_discharge[hour] == total_demand + EV_charge[hour])
+    else
+        @constraint(ESM, sum(generation[hour, :]) == total_demand)
+    end
 end
 
 # DSM constraints only if DSM is enabled
@@ -80,19 +74,22 @@ if enableDSM
     end
 end
 
-# V2G constraints for charging, discharging, and storage
-for hour in 1:T
-    # Capacity constraints for EV storage
-    @constraint(ESM, EV_storage[hour] <= EV_capacity)
-    # Charging and discharging rate limits
-    @constraint(ESM, EV_charge[hour] <= EV_charge_rate)
-    @constraint(ESM, EV_discharge[hour] <= EV_discharge_rate)
-end
+# V2G constraints only if V2G is enabled
+if enableV2G
+    # V2G constraints for charging, discharging, and storage
+    for hour in 1:T
+        # Capacity constraints for EV storage
+        @constraint(ESM, EV_storage[hour] <= EV_capacity)
+        # Charging and discharging rate limits
+        @constraint(ESM, EV_charge[hour] <= EV_charge_rate)
+        @constraint(ESM, EV_discharge[hour] <= EV_discharge_rate)
+    end
 
-# Energy balance for V2G storage
-for hour in 2:T
-    @constraint(ESM, EV_storage[hour] == EV_storage[hour-1] + EV_charge[hour-1] * charge_efficiency 
-                                            - EV_discharge[hour-1] / discharge_efficiency)
+    # Energy balance for V2G storage
+    for hour in 2:T
+        @constraint(ESM, EV_storage[hour] == EV_storage[hour-1] + EV_charge[hour-1] * charge_efficiency 
+                                                - EV_discharge[hour-1] / discharge_efficiency)
+    end
 end
 
 # Capacity constraints for each technology
@@ -147,9 +144,15 @@ println("Objective value: ", scaled_value, " million")
 
 # Export generation results to CSV (Include DSM and V2G results only if enabled)
 results = DataFrame(hour = 1:T, wind = value.(generation[:, 1]), solar = value.(generation[:, 2]), 
-                    coal = value.(generation[:, 3]), gas = value.(generation[:, 4]),
-                    EV_charge = value.(EV_charge), EV_discharge = value.(EV_discharge))
+                    coal = value.(generation[:, 3]), gas = value.(generation[:, 4]))
 
+# Add V2G results only if V2G is enabled
+if enableV2G
+    results[!, :EV_charge] = value.(EV_charge)
+    results[!, :EV_discharge] = value.(EV_discharge)
+end
+
+# Add DSM results only if DSM is enabled
 if enableDSM
     results[!, :DSM_up] = value.(DSM_up)
     results[!, :DSM_down] = value.(DSM_down)
@@ -159,8 +162,8 @@ CSV.write("generation_and_DSM_V2G_results.csv", results)
 
 
 # Objective values with and without DSM
-objective_dsm_enabled = 6.1240811049812496e7
-objective_dsm_disabled = 6.163192546720944e7
+objective_dsm_enabled = 5.232363541940724e7
+objective_dsm_disabled = 5.262354499571536e7
 
 # Calculate percentage cost reduction
 cost_reduction_percent = ((objective_dsm_disabled - objective_dsm_enabled) / objective_dsm_disabled) * 100
