@@ -9,11 +9,14 @@ availability = CSV.read("data/availability.csv", DataFrame)
 # Time steps (336 hours)
 T = 336
 
+# Demand scaling factor (Set to 1.0 for 100% of the demand, 0.5 for 50%, etc.)
+demand_scaling_factor = 1  # Adjust this value as needed
+
 # Initialize the model
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = true  # Set to true to use DSM, or false to run without DSM
+enableDSM = false  # Set to true to use DSM, or false to run without DSM
 
 # V2G toggle: Set to true if V2G should be used, false if not
 enableV2G = true  # Set to true to use V2G, or false to run without V2G
@@ -35,9 +38,9 @@ if enableV2G
 end
 
 # V2G parameters (example values)
-EV_capacity = 500  # Total capacity of EV fleet in MWh
-EV_charge_rate = 100  # Max charging rate in MW
-EV_discharge_rate = 100  # Max discharging rate in MW
+EV_capacity = 5000  # Total capacity of EV fleet in MWh
+EV_charge_rate = 1000  # Max charging rate in MW
+EV_discharge_rate = 1000  # Max discharging rate in MW
 charge_efficiency = 0.9  # Charging efficiency
 discharge_efficiency = 0.9  # Discharging efficiency
 
@@ -45,10 +48,10 @@ discharge_efficiency = 0.9  # Discharging efficiency
 for hour in 1:T
     if enableDSM
         # With DSM: Adjust demand satisfaction with DSM variables
-        total_demand = demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour] - DSM_up[hour] + DSM_down[hour]
+        total_demand = demand_scaling_factor * (demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour]) - DSM_up[hour] + DSM_down[hour]
     else
         # Without DSM: Normal demand satisfaction
-        total_demand = demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour]
+        total_demand = demand_scaling_factor * (demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour])
     end
 
     # Adjust demand satisfaction based on V2G if enabled
@@ -62,7 +65,7 @@ end
 # DSM constraints only if DSM is enabled
 if enableDSM
     DSM_max = 1  # Allow DSM to shift up to 100% of flexible demand
-    L = 6  # Expand the balancing window to 6 hours for greater flexibility
+    L = 20  # Expand the balancing window to 6 hours for greater flexibility
     for hour in 1:T
         @constraint(ESM, DSM_up[hour] <= DSM_max * demand[!, :flexible_demand][hour])
         @constraint(ESM, DSM_down[hour] <= DSM_max * demand[!, :flexible_demand][hour])
@@ -115,7 +118,7 @@ for hour in 1:T
 end
 
 # Ramp rate constraint: Limit how much generation can change between hours
-ramp_rate = 0.1  # For example, plants can only change output by 10% of capacity per hour
+ramp_rate = 1  # For example, plants can only change output by 10% of capacity per hour
 for hour in 2:T
     for tech in 7:9  # Apply ramp limits to Braunkohle (7), Steinkohle (8), and Erdgas (9)
         @constraint(ESM, generation[hour, tech] - generation[hour-1, tech] <= ramp_rate * generation_capacity[!, :capacity_mw][tech])
@@ -124,10 +127,14 @@ for hour in 2:T
 end
 
 # Reserve margin constraint: Ensure that a percentage of total capacity is always reserved
-reserve_margin = 0.1  # Require 10% of total capacity to be reserved
+reserve_margin = 0.0  # Require 10% of total capacity to be reserved
 for hour in 1:T
     @constraint(ESM, sum(generation[hour, :]) <= (1 - reserve_margin) * sum(generation_capacity[!, :capacity_mw]))
 end
+
+println("Total demand:", sum(demand[!, :fixed_demand]) * demand_scaling_factor)
+println("Generation capacity:", 336*sum(generation_capacity[!, :capacity_mw]))
+
 
 # Objective function: Minimize cost using time-varying costs
 @objective(ESM, Min, sum(generation[t, tech] * costs[tech, :cost_per_mwh] for t in 1:T, tech in 1:11))
@@ -179,8 +186,8 @@ end
 CSV.write("generation_and_DSM_V2G_results.csv", results)
 
 # Example for calculating and printing the cost reduction due to DSM (if DSM enabled/disabled)
-objective_dsm_enabled = 5.232363541940724e7  # Replace with the actual objective value from your run with DSM enabled
-objective_dsm_disabled = 5.262354499571536e7  # Replace with the actual objective value from your run with DSM disabled
+objective_dsm_enabled = 1.4767361444765788e8  # Replace with the actual objective value from your run with DSM enabled
+objective_dsm_disabled = 1.488507947617127e8  # Replace with the actual objective value from your run with DSM disabled
 
 # Calculate percentage cost reduction
 cost_reduction_percent = ((objective_dsm_disabled - objective_dsm_enabled) / objective_dsm_disabled) * 100
