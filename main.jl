@@ -1,25 +1,25 @@
 using JuMP, HiGHS, CSV, DataFrames
 
 # Load data from CSV files
-demand = CSV.read("data/demand.csv", DataFrame)
+demand = CSV.read("data/real_demand.csv", DataFrame)
 generation_capacity = CSV.read("data/generation_capacity.csv", DataFrame)
 costs = CSV.read("data/costs.csv", DataFrame)
-availability = CSV.read("data/availability.csv", DataFrame)
+availability = CSV.read("data/real_availability.csv", DataFrame)
 
-# Time steps (240 hours)
-T = 240
+# Time steps (336 hours)
+T = 336
 
 # Initialize the model
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = false  # Set to true to use DSM, or false to run without DSM
+enableDSM = true  # Set to true to use DSM, or false to run without DSM
 
 # V2G toggle: Set to true if V2G should be used, false if not
 enableV2G = true  # Set to true to use V2G, or false to run without V2G
 
-# Define decision variables for generation
-@variable(ESM, generation[1:T, 1:4] >= 0)  # Generation for wind, solar, coal, gas
+# Define decision variables for generation across 11 technologies
+@variable(ESM, generation[1:T, 1:11] >= 0)  # Generation for all technologies
 
 # Define DSM variables only if DSM is enabled
 if enableDSM
@@ -93,26 +93,31 @@ if enableV2G
 end
 
 # Capacity constraints for each technology
-for tech in 1:4  # 1: wind, 2: solar, 3: coal, 4: gas
+for tech in 1:11  # Update to handle all 11 technologies
     @constraint(ESM, generation[:, tech] .<= generation_capacity[!, :capacity_MW][tech])
 end
 
-# Add renewable availability for wind and solar
+# Add renewable availability for specific technologies
 for hour in 1:T
-    @constraint(ESM, generation[hour, 1] <= availability[!, :wind_availability][hour] * generation_capacity[!, :capacity_MW][1])
-    @constraint(ESM, generation[hour, 2] <= availability[!, :solar_availability][hour] * generation_capacity[!, :capacity_MW][2])
+    # Wind Offshore and Onshore, Photovoltaik (solar), and other renewables
+    @constraint(ESM, generation[hour, 3] <= availability[!, :wind_offshore_availability][hour] * generation_capacity[!, :capacity_MW][3])
+    @constraint(ESM, generation[hour, 4] <= availability[!, :wind_onshore_availability][hour] * generation_capacity[!, :capacity_MW][4])
+    @constraint(ESM, generation[hour, 5] <= availability[!, :photovoltaik_availability][hour] * generation_capacity[!, :capacity_MW][5])
+    @constraint(ESM, generation[hour, 6] <= availability[!, :sonstige_erneuerbare_availability][hour] * generation_capacity[!, :capacity_MW][6])
 end
 
 # Curtailment for wind
-@variable(ESM, curtailment_wind[1:T] >= 0)
+@variable(ESM, curtailment_wind_onshore[1:T] >= 0)
+@variable(ESM, curtailment_wind_offshore[1:T] >= 0)
 for hour in 1:T
-    @constraint(ESM, generation[hour, 1] + curtailment_wind[hour] == availability[!, :wind_availability][hour] * generation_capacity[!, :capacity_MW][1])
+    @constraint(ESM, generation[hour, 3] + curtailment_wind_offshore[hour] == availability[!, :wind_offshore_availability][hour] * generation_capacity[!, :capacity_MW][3])
+    @constraint(ESM, generation[hour, 4] + curtailment_wind_onshore[hour] == availability[!, :wind_onshore_availability][hour] * generation_capacity[!, :capacity_MW][4])
 end
 
 # Ramp rate constraint: Limit how much generation can change between hours
 ramp_rate = 0.1  # For example, plants can only change output by 10% of capacity per hour
 for hour in 2:T
-    for tech in 3:4  # Apply ramp limits to coal (3) and gas (4)
+    for tech in 7:9  # Apply ramp limits to Braunkohle (7), Steinkohle (8), and Erdgas (9)
         @constraint(ESM, generation[hour, tech] - generation[hour-1, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
         @constraint(ESM, generation[hour-1, tech] - generation[hour, tech] <= ramp_rate * generation_capacity[!, :capacity_MW][tech])
     end
@@ -125,7 +130,7 @@ for hour in 1:T
 end
 
 # Objective function: Minimize cost using time-varying costs
-@objective(ESM, Min, sum(generation[t, tech] * time_varying_costs[t, tech] for t in 1:T, tech in 1:4))
+@objective(ESM, Min, sum(generation[t, tech] * costs[tech, :cost_per_MWh] for t in 1:T, tech in 1:11))
 
 # Solve the model
 optimize!(ESM)
@@ -143,13 +148,26 @@ scaled_value = objective_val * 1e-6
 println("Objective value: ", scaled_value, " million")
 
 # Export generation results to CSV (Include DSM and V2G results only if enabled)
-results = DataFrame(hour = 1:T, wind = value.(generation[:, 1]), solar = value.(generation[:, 2]), 
-                    coal = value.(generation[:, 3]), gas = value.(generation[:, 4]))
+results = DataFrame(
+    hour = 1:T, 
+    biomasse = value.(generation[:, 1]), 
+    wasserkraft = value.(generation[:, 2]),
+    wind_offshore = value.(generation[:, 3]), 
+    wind_onshore = value.(generation[:, 4]), 
+    photovoltaik = value.(generation[:, 5]), 
+    sonstige_erneuerbare = value.(generation[:, 6]), 
+    braunkohle = value.(generation[:, 7]), 
+    steinkohle = value.(generation[:, 8]), 
+    erdgas = value.(generation[:, 9]), 
+    pumpspeicher = value.(generation[:, 10]), 
+    sonstige_konventionelle = value.(generation[:, 11])
+)
 
 # Add V2G results only if V2G is enabled
 if enableV2G
     results[!, :EV_charge] = value.(EV_charge)
     results[!, :EV_discharge] = value.(EV_discharge)
+    results[!, :EV_storage] = value.(EV_storage)
 end
 
 # Add DSM results only if DSM is enabled
@@ -160,10 +178,9 @@ end
 
 CSV.write("generation_and_DSM_V2G_results.csv", results)
 
-
-# Objective values with and without DSM
-objective_dsm_enabled = 5.232363541940724e7
-objective_dsm_disabled = 5.262354499571536e7
+# Example for calculating and printing the cost reduction due to DSM (if DSM enabled/disabled)
+objective_dsm_enabled = 5.232363541940724e7  # Replace with the actual objective value from your run with DSM enabled
+objective_dsm_disabled = 5.262354499571536e7  # Replace with the actual objective value from your run with DSM disabled
 
 # Calculate percentage cost reduction
 cost_reduction_percent = ((objective_dsm_disabled - objective_dsm_enabled) / objective_dsm_disabled) * 100

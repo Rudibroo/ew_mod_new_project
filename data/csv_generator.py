@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 # Define demand profile for 10 days (240 hours)
-T = 240
+T = 360
 hours = list(range(1, T + 1))
 
 # Create realistic daily demand pattern
@@ -51,9 +51,9 @@ costs_df.to_csv('costs.csv', index=False)
 
 # Create the availability.csv file
 availability_data = {
-    'hour': list(range(1, 241)),
-    'wind_availability': [0.6 + (0.2 * ((i % 5) / 5)) for i in range(240)],  # Example wind availability
-    'solar_availability': [0.0 if i % 24 < 6 or i % 24 > 18 else 0.8 for i in range(240)]  # Solar availability (day/night cycle)
+    'hour': list(range(1, 361)),
+    'wind_availability': [0.6 + (0.2 * ((i % 5) / 5)) for i in range(360)],  # Example wind availability
+    'solar_availability': [0.0 if i % 24 < 6 or i % 24 > 18 else 0.8 for i in range(360)]  # Solar availability (day/night cycle)
 }
 availability_df = pd.DataFrame(availability_data)
 availability_df.to_csv('availability.csv', index=False)

@@ -1,5 +1,12 @@
 technology,capacity_MW
-wind,10000
-solar,8000
-coal,5000
-gas,4000
+Biomasse,8577
+Wasserkraft,5112
+Wind Onshore,8456
+Wind Offshore,59841
+Photovoltaik,76601
+Sonstige Erneuerbare,410
+Braunkohle,18363
+Steinkohle,12966
+Erdgas,36255
+Pumpspeicher,9449
+Sonstige Konventionelle,8813

@@ -1,5 +1,11 @@
 technology,cost_per_MWh
-wind,10
-solar,15
-coal,50
-gas,40
+Biomasse,80
+Wasserkraft,30
+Wind Offshore,60
+Wind Onshore,40
+Photovoltaik,35
+Sonstige Erneuerbare,90
+Braunkohle,45
+Steinkohle,50
+Erdgas,70
+Sonstige Konventionelle,100
