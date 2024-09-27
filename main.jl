@@ -8,7 +8,7 @@ costs = CSV.read("data_2024/costs.csv", DataFrame)
 availability = CSV.read("data_2024/availability.csv", DataFrame)
 =#
 # Load data from CSV files, Year 2040
-demand = CSV.read("data_2040/adjusted_total_demand_simulated_large_scale.csv", DataFrame)  # Now this only has total_demand
+demand = CSV.read("data_2040/demand_profile_balanced_peaks.csv", DataFrame)  # Now this only has total_demand
 generation_capacity = CSV.read("data_2040/generation_capacity.csv", DataFrame)
 costs = CSV.read("data_2040/costs.csv", DataFrame)
 availability = CSV.read("data_2040/availability.csv", DataFrame)
@@ -17,7 +17,7 @@ availability = CSV.read("data_2040/availability.csv", DataFrame)
 T = 336
 
 # Demand scaling factor (Set to 1.0 for 100% of the demand, 0.5 for 50%, etc.)
-demand_scaling_factor = 1.1  # Adjust this value as needed
+demand_scaling_factor = 0.5  # Adjust this value as needed
 
 # Define the fixed and flexible demand ratio (must sum to 1)
 fixed_demand_ratio = 1/3  # You can adjust this value for sensitivity analysis
@@ -203,7 +203,7 @@ if enableDSM
     results[!, :DSM_down] = value.(DSM_down)
 end
 
-CSV.write("generation_and_DSM_V2G_results.csv", results)
+CSV.write("data_2040/generation_and_DSM_V2G_results.csv", results)
 
 # Example for calculating and printing the cost reduction due to DSM (if DSM enabled/disabled)
 objective_dsm_enabled = 3.6937716306335413e8  # Replace with the actual objective value from your run with DSM enabled
