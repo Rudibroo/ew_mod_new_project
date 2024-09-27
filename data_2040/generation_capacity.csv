@@ -1,0 +1,12 @@
+technology,capacity_mw
+biomasse,2300
+wasserkraft,5200
+wind_onshore,60000
+wind_offshore,45000
+photovoltaik,275000
+sonstige_erneuerbare,0
+braunkohle,0
+steinkohle,0
+erdgas,0
+pumpspeicher,0
+sonstige_konventionelle,0

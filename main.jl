@@ -1,22 +1,33 @@
 using JuMP, HiGHS, CSV, DataFrames
 
-# Load data from CSV files
-demand = CSV.read("data/demand.csv", DataFrame)
-generation_capacity = CSV.read("data/generation_capacity.csv", DataFrame)
-costs = CSV.read("data/costs.csv", DataFrame)
-availability = CSV.read("data/availability.csv", DataFrame)
+#=
+# Load data from CSV files, Year 2024
+demand = CSV.read("data_2024/total_demand.csv", DataFrame)  # Now this only has total_demand
+generation_capacity = CSV.read("data_2024/generation_capacity.csv", DataFrame)
+costs = CSV.read("data_2024/costs.csv", DataFrame)
+availability = CSV.read("data_2024/availability.csv", DataFrame)
+=#
+# Load data from CSV files, Year 2040
+demand = CSV.read("data_2040/adjusted_total_demand_simulated_large_scale.csv", DataFrame)  # Now this only has total_demand
+generation_capacity = CSV.read("data_2040/generation_capacity.csv", DataFrame)
+costs = CSV.read("data_2040/costs.csv", DataFrame)
+availability = CSV.read("data_2040/availability.csv", DataFrame)
 
 # Time steps (336 hours)
 T = 336
 
 # Demand scaling factor (Set to 1.0 for 100% of the demand, 0.5 for 50%, etc.)
-demand_scaling_factor = 1  # Adjust this value as needed
+demand_scaling_factor = 1.1  # Adjust this value as needed
+
+# Define the fixed and flexible demand ratio (must sum to 1)
+fixed_demand_ratio = 1/3  # You can adjust this value for sensitivity analysis
+flexible_demand_ratio = 1 - fixed_demand_ratio  # Ensures the sum is 1
 
 # Initialize the model
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = true  # Set to true to use DSM, or false to run without DSM
+enableDSM = false  # Set to true to use DSM, or false to run without DSM
 
 # V2G toggle: Set to true if V2G should be used, false if not
 enableV2G = true  # Set to true to use V2G, or false to run without V2G
@@ -46,12 +57,16 @@ discharge_efficiency = 0.9  # Discharging efficiency
 
 # Constraints for demand satisfaction
 for hour in 1:T
+    # Calculate the fixed and flexible demand from total_demand based on the ratio
+    fixed_demand = demand[!, :total_demand][hour] * fixed_demand_ratio
+    flexible_demand = demand[!, :total_demand][hour] * flexible_demand_ratio
+
     if enableDSM
         # With DSM: Adjust demand satisfaction with DSM variables
-        total_demand = demand_scaling_factor * (demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour]) - DSM_up[hour] + DSM_down[hour]
+        total_demand = demand_scaling_factor * (fixed_demand + flexible_demand) - DSM_up[hour] + DSM_down[hour]
     else
         # Without DSM: Normal demand satisfaction
-        total_demand = demand_scaling_factor * (demand[!, :fixed_demand][hour] + demand[!, :flexible_demand][hour])
+        total_demand = demand_scaling_factor * (fixed_demand + flexible_demand)
     end
 
     # Adjust demand satisfaction based on V2G if enabled
@@ -65,17 +80,23 @@ end
 # DSM constraints only if DSM is enabled
 if enableDSM
     DSM_max = 1  # Allow DSM to shift up to 100% of flexible demand
-    L = 20  # Expand the balancing window to 6 hours for greater flexibility
+    L = 20  # Expand the balancing window to 20 hours for greater flexibility
     for hour in 1:T
-        @constraint(ESM, DSM_up[hour] <= DSM_max * demand[!, :flexible_demand][hour])
-        @constraint(ESM, DSM_down[hour] <= DSM_max * demand[!, :flexible_demand][hour])
+        # Calculate flexible demand within the loop
+        fixed_demand = demand[!, :total_demand][hour] * fixed_demand_ratio
+        flexible_demand = demand[!, :total_demand][hour] * flexible_demand_ratio
+
+        # Use flexible demand in the DSM constraints
+        @constraint(ESM, DSM_up[hour] <= DSM_max * flexible_demand)
+        @constraint(ESM, DSM_down[hour] <= DSM_max * flexible_demand)
     end
 
-    # DSM balance constraint (shift must balance within a 6-hour window)
+    # DSM balance constraint (shift must balance within a 20-hour window)
     for hour in 1:(T-L)
         @constraint(ESM, sum(DSM_up[hour:hour+L]) == sum(DSM_down[hour:hour+L]))
     end
 end
+
 
 # V2G constraints only if V2G is enabled
 if enableV2G
@@ -132,9 +153,8 @@ for hour in 1:T
     @constraint(ESM, sum(generation[hour, :]) <= (1 - reserve_margin) * sum(generation_capacity[!, :capacity_mw]))
 end
 
-println("Total demand:", sum(demand[!, :fixed_demand]) * demand_scaling_factor)
+println("Total demand:", sum(demand[!, :total_demand]) * demand_scaling_factor)
 println("Generation capacity:", 336*sum(generation_capacity[!, :capacity_mw]))
-
 
 # Objective function: Minimize cost using time-varying costs
 @objective(ESM, Min, sum(generation[t, tech] * costs[tech, :cost_per_mwh] for t in 1:T, tech in 1:11))
@@ -186,8 +206,8 @@ end
 CSV.write("generation_and_DSM_V2G_results.csv", results)
 
 # Example for calculating and printing the cost reduction due to DSM (if DSM enabled/disabled)
-objective_dsm_enabled = 1.4767361444765788e8  # Replace with the actual objective value from your run with DSM enabled
-objective_dsm_disabled = 1.488507947617127e8  # Replace with the actual objective value from your run with DSM disabled
+objective_dsm_enabled = 3.6937716306335413e8  # Replace with the actual objective value from your run with DSM enabled
+objective_dsm_disabled = 3.7107632507933134e8  # Replace with the actual objective value from your run with DSM disabled
 
 # Calculate percentage cost reduction
 cost_reduction_percent = ((objective_dsm_disabled - objective_dsm_enabled) / objective_dsm_disabled) * 100
