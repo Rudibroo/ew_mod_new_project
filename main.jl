@@ -16,7 +16,7 @@ demand_scaling_factor = 1  # Adjust this value as needed
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = false  # Set to true to use DSM, or false to run without DSM
+enableDSM = true  # Set to true to use DSM, or false to run without DSM
 
 # V2G toggle: Set to true if V2G should be used, false if not
 enableV2G = true  # Set to true to use V2G, or false to run without V2G
