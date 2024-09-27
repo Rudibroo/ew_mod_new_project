@@ -8,7 +8,7 @@ costs = CSV.read("data_2024/costs.csv", DataFrame)
 availability = CSV.read("data_2024/availability.csv", DataFrame)
 =#
 # Load data from CSV files, Year 2040
-demand = CSV.read("data_2040/demand_profile_balanced_peaks.csv", DataFrame)  # Now this only has total_demand
+demand = CSV.read("data_2040/demand_profile_inverse_peaks.csv", DataFrame)  # Now this only has total_demand
 generation_capacity = CSV.read("data_2040/generation_capacity.csv", DataFrame)
 costs = CSV.read("data_2040/costs.csv", DataFrame)
 availability = CSV.read("data_2040/availability.csv", DataFrame)
@@ -27,7 +27,7 @@ flexible_demand_ratio = 1 - fixed_demand_ratio  # Ensures the sum is 1
 ESM = Model(HiGHS.Optimizer)
 
 # DSM toggle: Set to true if DSM should be used, false if not
-enableDSM = false  # Set to true to use DSM, or false to run without DSM
+enableDSM = true  # Set to true to use DSM, or false to run without DSM
 
 # V2G toggle: Set to true if V2G should be used, false if not
 enableV2G = true  # Set to true to use V2G, or false to run without V2G
