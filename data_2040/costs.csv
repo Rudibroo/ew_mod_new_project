@@ -1,4 +1,8 @@
 technology,cost_per_mwh
+biomasse,90
+wasserkraft,50
+wind_offshore,40
+wind_onshore,30
 biomasse,60
 wasserkraft,40
 wind_offshore,30
@@ -6,7 +10,3 @@ wind_onshore,35
 photovoltaik,25
 sonstige_erneuerbare,99999999
 braunkohle,99999999
-steinkohle,99999999
-erdgas,99999999
-pumpspeicher,99999999
-sonstige_konventionelle,99999999

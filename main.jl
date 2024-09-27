@@ -8,19 +8,19 @@ costs = CSV.read("data_2024/costs.csv", DataFrame)
 availability = CSV.read("data_2024/availability.csv", DataFrame)
 =#
 # Load data from CSV files, Year 2040
-demand = CSV.read("data_2040/demand_profile_inverse_peaks.csv", DataFrame)  # Now this only has total_demand
+demand = CSV.read("data_2040/total_demand.csv", DataFrame)  # Now this only has total_demand
 generation_capacity = CSV.read("data_2040/generation_capacity.csv", DataFrame)
 costs = CSV.read("data_2040/costs.csv", DataFrame)
 availability = CSV.read("data_2040/availability.csv", DataFrame)
 
 # Time steps (336 hours)
-T = 336
+T = 1344
 
 # Demand scaling factor (Set to 1.0 for 100% of the demand, 0.5 for 50%, etc.)
-demand_scaling_factor = 0.5  # Adjust this value as needed
+demand_scaling_factor = 0.1  # Adjust this value as needed
 
 # Define the fixed and flexible demand ratio (must sum to 1)
-fixed_demand_ratio = 1/3  # You can adjust this value for sensitivity analysis
+fixed_demand_ratio = 2/3  # You can adjust this value for sensitivity analysis
 flexible_demand_ratio = 1 - fixed_demand_ratio  # Ensures the sum is 1
 
 # Initialize the model
@@ -80,7 +80,7 @@ end
 # DSM constraints only if DSM is enabled
 if enableDSM
     DSM_max = 1  # Allow DSM to shift up to 100% of flexible demand
-    L = 20  # Expand the balancing window to 20 hours for greater flexibility
+    L = 255  # Expand the balancing window to 20 hours for greater flexibility
     for hour in 1:T
         # Calculate flexible demand within the loop
         fixed_demand = demand[!, :total_demand][hour] * fixed_demand_ratio
